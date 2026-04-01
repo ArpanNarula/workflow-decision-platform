@@ -1,0 +1,65 @@
+external_dependencies:
+- description: Simulates a credit bureau API with 15% failure rate for retry testing
+  name: credit_bureau
+  type: mock
+retry:
+  backoff_seconds: 2
+  max_attempts: 3
+stages:
+- name: schema_validation
+  required: true
+  required_fields:
+  - age
+  - monthly_income
+  - loan_amount
+  - employment_status
+  type: validation
+- dependency: credit_bureau
+  name: credit_check
+  required: true
+  timeout_seconds: 5
+  type: external_dependency
+- name: rule_evaluation
+  required: true
+  rules:
+  - condition: data.age >= 18
+    description: Applicant must be at least 18 years old
+    id: age_min
+    on_fail: reject
+  - condition: data.age <= 65
+    description: Applicant must be under 65 years old
+    id: age_max
+    on_fail: reject
+  - condition: data.monthly_income >= 25000
+    description: Monthly income must be at least Rs. 25,000
+    id: min_income
+    on_fail: reject
+  - condition: external.credit_score >= 600
+    description: Credit score must be 600 or above
+    id: credit_score_threshold
+    on_fail: reject
+  - condition: data.loan_amount <= data.monthly_income * 10
+    description: Loan amount must not exceed 10x monthly income
+    id: loan_to_income_ratio
+    on_fail: manual_review
+  - condition: data.employment_status in ['employed', 'self_employed']
+    description: Applicant must be employed or self-employed
+    id: employment_check
+    on_fail: reject
+  - condition: data.existing_loans <= 3
+    description: Applicant must not hold more than 3 active loans
+    id: existing_loans_limit
+    on_fail: manual_review
+  type: rules
+- model: gemini-1.5-flash
+  name: ai_decision
+  required: true
+  type: ai_agent
+- name: final_decision
+  required: true
+  type: decision
+workflow:
+  author: Arpan Narula
+  description: AI-powered personal loan application workflow
+  name: loan_approval
+  version: '1.0'

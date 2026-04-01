@@ -1,0 +1,58 @@
+workflow:
+  name: employee_onboarding
+  description: Employee onboarding approval workflow
+  version: "1.0"
+  author: Arpan Narula
+
+stages:
+  - name: schema_validation
+    type: validation
+    required: true
+    required_fields:
+      - age
+      - role
+      - department
+      - experience_years
+      - offered_salary
+
+  - name: background_check
+    type: external_dependency
+    required: true
+    dependency: credit_bureau
+
+  - name: rule_evaluation
+    type: rules
+    required: true
+    rules:
+      - id: min_age
+        description: Candidate must be at least 18 years old
+        condition: "data.age >= 18"
+        on_fail: reject
+
+      - id: experience_check
+        description: Candidate must have at least 2 years of experience
+        condition: "data.experience_years >= 2"
+        on_fail: manual_review
+
+      - id: salary_range
+        description: Offered salary must be at least Rs. 30,000 per month
+        condition: "data.offered_salary >= 30000"
+        on_fail: manual_review
+
+      - id: no_criminal_record
+        description: Background check credit score proxy - clean record required
+        condition: "external.credit_score >= 500"
+        on_fail: reject
+
+  - name: ai_decision
+    type: ai_agent
+    required: true
+    model: gemini-1.5-flash
+
+  - name: final_decision
+    type: decision
+    required: true
+
+retry:
+  max_attempts: 3
+  backoff_seconds: 2

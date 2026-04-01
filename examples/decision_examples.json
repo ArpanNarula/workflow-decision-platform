@@ -1,0 +1,97 @@
+{
+  "examples": [
+    {
+      "title": "Approved - Strong Applicant",
+      "request": {
+        "request_id": "example-001",
+        "workflow_type": "loan_approval",
+        "applicant_name": "Rahul Sharma",
+        "data": {
+          "age": 30,
+          "monthly_income": 80000,
+          "loan_amount": 500000,
+          "employment_status": "employed",
+          "existing_loans": 0,
+          "loan_purpose": "home renovation"
+        }
+      },
+      "expected_output": {
+        "status": "approved",
+        "rules_triggered": [
+          {"rule_id": "age_min", "passed": true, "value_evaluated": 30},
+          {"rule_id": "age_max", "passed": true, "value_evaluated": 30},
+          {"rule_id": "min_income", "passed": true, "value_evaluated": 80000},
+          {"rule_id": "credit_score_threshold", "passed": true, "value_evaluated": 720},
+          {"rule_id": "loan_to_income_ratio", "passed": true, "value_evaluated": 500000},
+          {"rule_id": "employment_check", "passed": true, "value_evaluated": "employed"},
+          {"rule_id": "existing_loans_limit", "passed": true, "value_evaluated": 0}
+        ],
+        "ai_reasoning": "Rahul presents a strong financial profile with stable employment, healthy income-to-loan ratio, and no existing debt. Credit score well above threshold. Approved with high confidence."
+      }
+    },
+    {
+      "title": "Rejected - Underage + Unemployed",
+      "request": {
+        "request_id": "example-002",
+        "workflow_type": "loan_approval",
+        "applicant_name": "Minor Applicant",
+        "data": {
+          "age": 16,
+          "monthly_income": 0,
+          "loan_amount": 100000,
+          "employment_status": "unemployed",
+          "existing_loans": 0
+        }
+      },
+      "expected_output": {
+        "status": "rejected",
+        "rules_triggered": [
+          {"rule_id": "age_min", "passed": false, "on_fail_action": "reject"},
+          {"rule_id": "min_income", "passed": false, "on_fail_action": "reject"},
+          {"rule_id": "employment_check", "passed": false, "on_fail_action": "reject"}
+        ],
+        "ai_reasoning": "Applicant is underage and has no verifiable income or employment. Three hard reject rules triggered. Application cannot proceed."
+      }
+    },
+    {
+      "title": "Manual Review - High Loan Ratio",
+      "request": {
+        "request_id": "example-003",
+        "workflow_type": "loan_approval",
+        "applicant_name": "Priya Verma",
+        "data": {
+          "age": 35,
+          "monthly_income": 45000,
+          "loan_amount": 500000,
+          "employment_status": "self_employed",
+          "existing_loans": 2,
+          "loan_purpose": "business expansion"
+        }
+      },
+      "expected_output": {
+        "status": "manual_review",
+        "rules_triggered": [
+          {"rule_id": "loan_to_income_ratio", "passed": false, "on_fail_action": "manual_review"},
+          {"rule_id": "existing_loans_limit", "passed": false, "on_fail_action": "manual_review"}
+        ],
+        "ai_reasoning": "Applicant is self-employed with an elevated loan-to-income ratio and existing debt. No hard rejections, but risk warrants human review before final decision."
+      }
+    },
+    {
+      "title": "Idempotent Replay - Same request_id",
+      "request": {
+        "request_id": "example-001",
+        "workflow_type": "loan_approval",
+        "applicant_name": "Rahul Sharma",
+        "data": {
+          "age": 30,
+          "monthly_income": 80000,
+          "loan_amount": 500000,
+          "employment_status": "employed",
+          "existing_loans": 0
+        }
+      },
+      "expected_behaviour": "Returns exact same response as example-001. Header X-Idempotent-Replay: true is set. Workflow is NOT reprocessed."
+    }
+  ]
+}
