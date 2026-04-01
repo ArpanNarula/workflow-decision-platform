@@ -4,7 +4,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 from app.main import app
-from app.state_manager import init_db
+from app.state_manager import init_db 
 
 
 def build_credit_response(applicant_name: str, credit_score: int = 720) -> dict:
