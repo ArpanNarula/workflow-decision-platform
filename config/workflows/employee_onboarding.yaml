@@ -4,7 +4,7 @@ workflow:
   version: "1.0"
   author: Arpan Narula
 
-stages:
+stages: 
   - name: schema_validation
     type: validation
     required: true
