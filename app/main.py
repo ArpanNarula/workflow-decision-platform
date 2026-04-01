@@ -49,6 +49,7 @@ def _render_homepage(workflows: list[str]) -> str:
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>Configurable Workflow Decision System</title>
+    <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='16' fill='%23b6542c'/%3E%3Ctext x='32' y='42' font-size='28' text-anchor='middle' fill='white' font-family='Georgia'%3EW%3C/text%3E%3C/svg%3E" />
     <style>
       :root {{
         color-scheme: light;
@@ -133,7 +134,9 @@ def _render_homepage(workflows: list[str]) -> str:
       pre {{
         margin: 0;
         overflow-x: auto;
-        white-space: pre-wrap;
+        white-space: pre;
+        line-height: 1.55;
+        font-size: 0.93rem;
         background: #1f2430;
         color: #f7f0e8;
         border-radius: 18px;
@@ -173,10 +176,10 @@ def _render_homepage(workflows: list[str]) -> str:
   <body>
     <main>
       <section class="hero">
-        <div class="eyebrow">Assignment Submission</div>
+        <div class="eyebrow">ScoreMe Placement Drive Hackathon</div>
         <h1>Configurable Workflow Decision System</h1>
         <p>
-          This is an API-first project for the resilient decision system assignment.
+          This is an API-first submission for the resilient decision system assignment.
           It executes configurable workflows from YAML, keeps workflow state in SQLite,
           records audit history, retries dependency failures, and can optionally run an AI review step.
         </p>
@@ -211,7 +214,7 @@ def _render_homepage(workflows: list[str]) -> str:
       <section class="section">
         <pre>curl -X POST http://127.0.0.1:8000/workflow/submit \\
   -H "Content-Type: application/json" \\
-  -d '{{"request_id":"demo-001","workflow_type":"loan_approval","applicant_name":"Ananya Singh","data":{{"age":30,"monthly_income":80000,"loan_amount":500000,"employment_status":"employed","existing_loans":0}}}}'</pre>
+  -d '{{\n    "request_id":"demo-001",\n    "workflow_type":"loan_approval",\n    "applicant_name":"Ananya Singh",\n    "data":{{\n      "age":30,\n      "monthly_income":80000,\n      "loan_amount":500000,\n      "employment_status":"employed",\n      "existing_loans":0\n    }}\n  }}'</pre>
       </section>
     </main>
   </body>

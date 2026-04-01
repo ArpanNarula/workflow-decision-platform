@@ -1,9 +1,13 @@
 # Configurable Workflow Decision System
 
-Submission for the "Design and Build a Resilient Decision System" hackathon assignment.
+Submission for the ScoreMe Placement Drive Hackathon assignment: "Design and Build a Resilient Decision System".
 
 Author: Arpan Narula  
 Stack: Python 3.11, FastAPI, SQLite, YAML-configured workflows, optional Gemini review
+
+## Local Preview
+
+![Local host homepage](assets/demo/localhost-homepage.png)
 
 ## What This Project Does
 
