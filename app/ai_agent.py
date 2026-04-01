@@ -1,19 +1,48 @@
-import os
+import importlib
 import json
 import logging
-import google.generativeai as genai
-from typing import Dict, Any, List
+import os
+from typing import Any, Dict, List, Optional, Tuple
+
 from app.models import RuleResult
 
 logger = logging.getLogger(__name__)
 
 
-def _build_model():
-    api_key = os.getenv("GEMINI_API_KEY", "")
+def _env_flag(name: str, default: bool = True) -> bool:
+    raw_value = os.getenv(name)
+    if raw_value is None:
+        return default
+    return raw_value.strip().lower() not in {"0", "false", "no", "off"}
+
+
+def is_ai_review_enabled(stage_config: Optional[Dict[str, Any]] = None) -> bool:
+    if stage_config and stage_config.get("enabled") is False:
+        return False
+    return _env_flag("ENABLE_AI_REVIEW", default=True)
+
+
+def _build_model(model_name: str) -> Tuple[str, Any]:
+    api_key = os.getenv("GEMINI_API_KEY", "").strip()
     if not api_key:
         raise ValueError("GEMINI_API_KEY not set in environment")
-    genai.configure(api_key=api_key)
-    return genai.GenerativeModel("gemini-1.5-flash")
+
+    try:
+        genai_module = importlib.import_module("google.genai")
+        return "google.genai", genai_module.Client(api_key=api_key)
+    except ModuleNotFoundError:
+        legacy_module = importlib.import_module("google.generativeai")
+        legacy_module.configure(api_key=api_key)
+        return "google.generativeai", legacy_module.GenerativeModel(model_name)
+
+
+def _generate_text(client_kind: str, client: Any, model_name: str, prompt: str) -> str:
+    if client_kind == "google.genai":
+        response = client.models.generate_content(model=model_name, contents=prompt)
+        return (response.text or "").strip()
+
+    response = client.generate_content(prompt)
+    return response.text.strip()
 
 
 def analyze_application(
@@ -21,16 +50,28 @@ def analyze_application(
     applicant_data: Dict[str, Any],
     rule_results: List[RuleResult],
     external_data: Dict[str, Any],
-    preliminary_decision: str
+    preliminary_decision: str,
+    stage_config: Optional[Dict[str, Any]] = None,
 ) -> Dict[str, Any]:
     """
-    Send application context to Gemini for an intelligent second-pass review.
-    The model looks beyond hard rules - catches edge cases, unusual patterns,
-    and explains the decision in plain language.
+    Send application context to an optional AI reviewer.
+    If AI review is disabled or unavailable, fall back to the rule-based decision.
     """
-    passed = [{"id": r.rule_id, "desc": r.description} for r in rule_results if r.passed]
-    failed = [{"id": r.rule_id, "desc": r.description, "action": r.on_fail_action}
-              for r in rule_results if not r.passed]
+    if not is_ai_review_enabled(stage_config):
+        return _rule_based_fallback(
+            preliminary_decision,
+            rule_results,
+            reason="Decision based on configured rules. AI review is disabled.",
+            reviewer_note="AI review disabled via config or environment.",
+        )
+
+    passed = [{"id": result.rule_id, "desc": result.description} for result in rule_results if result.passed]
+    failed = [
+        {"id": result.rule_id, "desc": result.description, "action": result.on_fail_action}
+        for result in rule_results
+        if not result.passed
+    ]
+    model_name = (stage_config or {}).get("model", "gemini-1.5-flash")
 
     prompt = f"""You are an AI decision agent for a {workflow_type.replace("_", " ")} system.
 
@@ -61,12 +102,11 @@ Respond ONLY with this exact JSON (no markdown, no extra text):
   "reviewer_note": "<any note for a human reviewer, or empty string>"
 }}"""
 
+    raw = ""
     try:
-        model = _build_model()
-        response = model.generate_content(prompt)
-        raw = response.text.strip()
+        client_kind, client = _build_model(model_name)
+        raw = _generate_text(client_kind, client, model_name, prompt)
 
-        # Strip markdown code fences if Gemini wraps in them
         if raw.startswith("```"):
             raw = raw.split("```")[1]
             if raw.startswith("json"):
@@ -76,31 +116,46 @@ Respond ONLY with this exact JSON (no markdown, no extra text):
         result = json.loads(raw)
         logger.info(
             "AI decision: %s | confidence: %s%%",
-            result.get("final_decision"), result.get("confidence")
+            result.get("final_decision"),
+            result.get("confidence"),
         )
         return result
+    except json.JSONDecodeError as exc:
+        logger.error("AI response parse failed: %s | raw=%s", exc, raw[:200])
+        return _rule_based_fallback(
+            preliminary_decision,
+            rule_results,
+            reason="AI review returned an invalid payload. Rule-based decision kept.",
+            reviewer_note="AI response parse failed.",
+        )
+    except Exception as exc:
+        logger.error("AI agent error: %s", exc)
+        return _rule_based_fallback(
+            preliminary_decision,
+            rule_results,
+            reason="Decision based on configured rules. AI review is unavailable.",
+            reviewer_note=f"AI review skipped: {exc}",
+        )
 
-    except json.JSONDecodeError as e:
-        logger.error("AI response parse failed: %s | raw=%s", e, raw[:200])
-        return _rule_based_fallback(preliminary_decision, rule_results)
-    except Exception as e:
-        logger.error("AI agent error: %s", e)
-        return _rule_based_fallback(preliminary_decision, rule_results)
 
-
-def _rule_based_fallback(preliminary_decision: str, rule_results: List[RuleResult]) -> Dict[str, Any]:
-    """Used when Gemini is unavailable. Falls back to rule engine decision."""
-    failed = [r for r in rule_results if not r.passed]
-    passed_count = len([r for r in rule_results if r.passed])
+def _rule_based_fallback(
+    preliminary_decision: str,
+    rule_results: List[RuleResult],
+    reason: str,
+    reviewer_note: str,
+) -> Dict[str, Any]:
+    """Used when AI review is disabled or unavailable."""
+    failed = [result for result in rule_results if not result.passed]
+    passed_count = len([result for result in rule_results if result.passed])
     return {
         "final_decision": preliminary_decision,
         "confidence": 70,
         "reasoning": (
             f"Decision based on {len(rule_results)} rule checks: "
             f"{passed_count} passed, {len(failed)} failed. "
-            f"AI analysis unavailable - rule engine decision applied."
+            f"{reason}"
         ),
-        "key_factors": [r.description for r in rule_results[:3]],
-        "risk_flags": [r.description for r in failed],
-        "reviewer_note": "AI agent offline. Manual verification recommended."
+        "key_factors": [result.description for result in rule_results[:3]],
+        "risk_flags": [result.description for result in failed],
+        "reviewer_note": reviewer_note,
     }

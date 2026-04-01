@@ -1,49 +1,77 @@
-# AI Workflow Decision Platform
+# Configurable Workflow Decision System
 
-**Author:** Arpan Narula | 2022UCI8004 | NSUT Delhi  
-**Stack:** Python 3.11, FastAPI, SQLite, Gemini 1.5 Flash  
-**Assignment:** Resilient Decision System - Hackathon
+Submission for the "Design and Build a Resilient Decision System" hackathon assignment.
 
----
+Author: Arpan Narula  
+Stack: Python 3.11, FastAPI, SQLite, YAML-configured workflows, optional Gemini review
 
-## What This Is
+## What This Project Does
 
-A configurable workflow engine that processes business requests - loan approvals, onboarding, vendor checks - through a multi-stage pipeline. Rules live in YAML files. An AI agent (Gemini) reviews every decision beyond what hard rules can catch. The system handles retries, duplicate requests, and full audit trails out of the box.
+This service accepts structured workflow requests, runs them through configured stages, stores state as the workflow progresses, records an audit trail, and returns a final decision.
 
-You can add a new workflow type, or change an existing rule, without touching any Python code.
+The implementation is intentionally configuration-driven. Workflow stages and rule definitions live in YAML files under `config/workflows/`, so changing a rule or adding a new workflow does not require a large code rewrite.
 
----
+The current repo includes:
 
-## Quickstart
+- `loan_approval`
+- `employee_onboarding`
+
+## Why It Matches The Assignment
+
+The assignment asked for a system that can:
+
+- accept and validate structured input
+- evaluate business rules
+- execute workflow stages including reject, retry, and manual review paths
+- maintain state and history
+- provide explainable audit information
+- tolerate requirement changes
+- simulate an external dependency
+- support idempotency
+
+This project covers those points with:
+
+- FastAPI request handling and schema validation
+- a YAML-driven workflow engine
+- retry handling for a simulated downstream dependency
+- SQLite-backed state tracking and idempotency caching
+- audit logging for every workflow step
+- tests for happy path, invalid input, duplicate request, retry flow, and rule change scenarios
+
+## Local Run
 
 ```bash
-# 1. Install dependencies
-pip3 install -r requirements.txt
+python3 -m venv .venv
+source .venv/bin/activate
+pip install -r requirements.txt
 
-# 2. Add your Gemini API key to .env (already set)
-# GEMINI_API_KEY=your_key_here
+cp .env.example .env
+# add GEMINI_API_KEY only if you want AI review enabled
 
-# 3. Start the server
 python3 -m uvicorn app.main:app --reload --port 8000
-
-# 4. Open API docs
-open http://localhost:8000/docs
-
-# 5. Run tests
-pytest tests/ -v
 ```
 
----
+Open one of these:
 
-## Try It - Submit a Loan Application
+- `http://127.0.0.1:8000/` for the landing page
+- `http://127.0.0.1:8000/docs` for Swagger UI
+- `http://127.0.0.1:8000/workflows` for the configured workflow list
+
+If you do not want the AI review stage while testing locally, run:
 
 ```bash
-curl -X POST http://localhost:8000/workflow/submit \
+ENABLE_AI_REVIEW=false python3 -m uvicorn app.main:app --reload --port 8000
+```
+
+## Example Request
+
+```bash
+curl -X POST http://127.0.0.1:8000/workflow/submit \
   -H "Content-Type: application/json" \
   -d '{
     "request_id": "loan-demo-001",
     "workflow_type": "loan_approval",
-    "applicant_name": "Rahul Sharma",
+    "applicant_name": "Ananya Singh",
     "data": {
       "age": 30,
       "monthly_income": 80000,
@@ -54,162 +82,101 @@ curl -X POST http://localhost:8000/workflow/submit \
   }'
 ```
 
-You get back: final decision, every rule that was evaluated, AI reasoning in plain English, and a full audit trail.
-
----
-
 ## Endpoints
 
-| Method | Endpoint | Description |
-|--------|----------|-------------|
-| GET | `/` | Health + available workflows |
-| GET | `/docs` | Interactive Swagger UI |
-| POST | `/workflow/submit` | Submit a workflow request |
-| GET | `/workflow/{id}/status` | Check current status |
-| GET | `/workflow/{id}/audit` | Full explainable audit trail |
-| GET | `/workflows` | List configured workflow types |
-| POST | `/config/reload/{type}` | Hot-reload YAML config (no restart) |
+| Method | Endpoint | Purpose |
+| --- | --- | --- |
+| `GET` | `/` | Minimal landing page for local use |
+| `GET` | `/api-info` | Machine-readable service summary |
+| `GET` | `/health` | Health check |
+| `GET` | `/docs` | Interactive API docs |
+| `GET` | `/workflows` | List configured workflow types |
+| `POST` | `/workflow/submit` | Submit a workflow request |
+| `GET` | `/workflow/{id}/status` | Inspect current status |
+| `GET` | `/workflow/{id}/audit` | Retrieve audit trail |
+| `POST` | `/config/reload/{type}` | Reload one workflow config |
 
----
+## Project Layout
 
-## Project Structure
-
-```
+```text
 workflow-decision-platform/
 ├── app/
-│   ├── main.py              # FastAPI app + all endpoints
-│   ├── models.py            # Pydantic request/response models
-│   ├── workflow_engine.py   # Stage orchestration + retry logic
-│   ├── rules_engine.py      # YAML condition evaluator
-│   ├── ai_agent.py          # Gemini AI decision layer
-│   ├── state_manager.py     # SQLite persistence + idempotency cache
-│   ├── config_loader.py     # YAML loader with hot-reload
-│   ├── audit_logger.py      # Structured audit trail
-│   └── external_deps.py     # Mock credit bureau (simulates failures)
+│   ├── ai_agent.py
+│   ├── audit_logger.py
+│   ├── config_loader.py
+│   ├── external_deps.py
+│   ├── main.py
+│   ├── models.py
+│   ├── rules_engine.py
+│   ├── state_manager.py
+│   └── workflow_engine.py
 ├── config/
 │   └── workflows/
-│       ├── loan_approval.yaml       # Full loan workflow config
-│       └── employee_onboarding.yaml # Onboarding workflow config
-├── tests/
-│   ├── conftest.py           # Shared fixtures
-│   ├── test_happy_path.py    # Valid inputs, expected decisions
-│   ├── test_invalid_input.py # Bad data, missing fields, wrong types
-│   ├── test_duplicate.py     # Idempotency verification
-│   ├── test_retry.py         # External dep failures + retry
-│   └── test_rule_change.py   # YAML rule change without restart
 ├── examples/
-│   └── decision_examples.json  # Sample inputs + expected outputs
-├── .env                     # API keys
+├── tests/
+├── .env.example
+├── ARCHITECTURE.md
 └── requirements.txt
 ```
 
----
+## Configurability
 
-## How to Add a New Workflow
+Each workflow is defined by YAML:
 
-No Python code needed. Create a YAML file:
+- stage sequence
+- required fields
+- rule conditions
+- failure actions
+- retry settings
+- whether the AI review stage is enabled
 
-```bash
-touch config/workflows/vendor_approval.yaml
-```
-
-```yaml
-workflow:
-  name: vendor_approval
-  version: "1.0"
-
-stages:
-  - name: schema_validation
-    type: validation
-    required_fields: [company_name, annual_revenue, years_in_business]
-
-  - name: rule_evaluation
-    type: rules
-    rules:
-      - id: min_revenue
-        description: Annual revenue must exceed Rs. 10 lakh
-        condition: "data.annual_revenue >= 1000000"
-        on_fail: reject
-
-      - id: min_years
-        description: Company must be at least 2 years old
-        condition: "data.years_in_business >= 2"
-        on_fail: manual_review
-
-  - name: ai_decision
-    type: ai_agent
-
-  - name: final_decision
-    type: decision
-
-retry:
-  max_attempts: 3
-  backoff_seconds: 2
-```
-
-Then reload (no restart):
-
-```bash
-curl -X POST http://localhost:8000/config/reload/vendor_approval
-```
-
-Submit a vendor request and it works immediately.
-
----
-
-## Changing Existing Rules (No Restart)
-
-Edit `config/workflows/loan_approval.yaml` - for example, tighten the credit score threshold:
+Example idea:
 
 ```yaml
-- id: credit_score_threshold
-  description: Credit score must be 700 or above  # was 600
-  condition: "external.credit_score >= 700"        # changed
-  on_fail: reject
+- name: ai_decision
+  type: ai_agent
+  required: true
+  enabled: true
+  model: gemini-1.5-flash
 ```
 
-Then:
+If you want to disable AI review for a workflow, you can set `enabled: false` for that stage or use the environment variable `ENABLE_AI_REVIEW=false`.
 
-```bash
-curl -X POST http://localhost:8000/config/reload/loan_approval
-```
+## Notes On The Rules Engine
 
-All subsequent requests use the new rule. No code change, no restart.
+The rules engine uses a restricted AST parser instead of `eval()`. It supports:
 
----
+- comparison operators like `>=`, `<=`, `==`, `!=`
+- membership checks like `in`
+- basic arithmetic such as `data.monthly_income * 10`
+- boolean combinations with `and` and `or`
 
-## Idempotency
+That keeps the rule format readable without executing arbitrary code from workflow files.
 
-Send the same `request_id` twice - you get the same response, the workflow does not run again, and the response header `X-Idempotent-Replay: true` is set. This handles network retries and accidental duplicate submissions safely.
+## Tests
 
----
-
-## Retry Logic
-
-The credit bureau mock fails ~15% of the time (configurable). The engine retries up to 3 times with exponential backoff (2s, 4s). If all attempts fail, the API returns HTTP 503 with a clear error. No silent failures.
-
----
-
-## Running Tests
+Run the full suite with:
 
 ```bash
 pytest tests/ -v
-
-# Run a specific test file
-pytest tests/test_rule_change.py -v
-
-# With coverage
-pytest tests/ --tb=short
 ```
 
-Expected: 20+ test cases covering happy path, invalid input, duplicate requests, retry failures, and live rule changes.
+The tests cover:
 
----
+- approved path
+- manual review path
+- invalid input
+- duplicate request replay
+- dependency retry behavior
+- hot rule reload behavior
+- safe rules-engine evaluation
 
 ## Scaling Notes
 
-- **State store:** SQLite works fine for this demo. In production, swap for PostgreSQL (change 3 lines in `state_manager.py`).
-- **AI layer:** Gemini calls are synchronous here. At scale, move to async with `asyncio` + connection pooling.
-- **Config store:** YAMLs can move to a database table or S3 bucket - the `config_loader.py` interface stays the same.
-- **Workers:** FastAPI + uvicorn support multi-worker deployments with `--workers 4`. State in SQLite/Postgres handles concurrency safely.
-- **Rule engine:** Current evaluator handles standard comparisons. A more complex DSL (e.g. using `lark`) can extend it without touching workflow logic.
+For the assignment, SQLite is enough and keeps the setup simple. If this were taken further, the first upgrades would be:
+
+- PostgreSQL instead of SQLite
+- background execution or async handling for long-running stages
+- stronger auth and access control around audit endpoints
+- dedicated config storage instead of local YAML files
+- circuit breakers and metrics around external dependencies

@@ -39,4 +39,4 @@ def list_available_workflows() -> list:
     workflows_dir = os.path.join(CONFIG_DIR, "workflows")
     if not os.path.exists(workflows_dir):
         return []
-    return [f.replace(".yaml", "") for f in os.listdir(workflows_dir) if f.endswith(".yaml")]
+    return sorted(f.replace(".yaml", "") for f in os.listdir(workflows_dir) if f.endswith(".yaml"))

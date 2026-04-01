@@ -1,97 +1,113 @@
+import ast
 import logging
-from typing import Dict, Any, List, Tuple, Optional
+import operator
+from typing import Any, Dict, List, Tuple
+
 from app.models import RuleResult
 
 logger = logging.getLogger(__name__)
 
+_ALLOWED_BIN_OPS = {
+    ast.Add: operator.add,
+    ast.Sub: operator.sub,
+    ast.Mult: operator.mul,
+    ast.Div: operator.truediv,
+    ast.FloorDiv: operator.floordiv,
+    ast.Mod: operator.mod,
+}
 
-def _resolve_path(path: str, context: Dict[str, Any]) -> Any:
-    """Resolve dotted path like 'data.age' or 'external.credit_score' from context dict."""
-    parts = path.strip().split(".")
-    val = context
-    for part in parts:
-        if isinstance(val, dict):
-            val = val.get(part)
-        else:
-            return None
-    return val
+_ALLOWED_COMPARE_OPS = {
+    ast.Gt: operator.gt,
+    ast.GtE: operator.ge,
+    ast.Lt: operator.lt,
+    ast.LtE: operator.le,
+    ast.Eq: operator.eq,
+    ast.NotEq: operator.ne,
+    ast.In: lambda left, right: left in right,
+    ast.NotIn: lambda left, right: left not in right,
+}
 
 
-def _parse_value(val_str: str, context: Dict[str, Any]) -> Any:
-    """Try to resolve as context path first, then as a Python literal."""
-    resolved = _resolve_path(val_str, context)
-    if resolved is not None:
-        return resolved
-    try:
-        return eval(val_str, {"__builtins__": {}})
-    except Exception:
-        return val_str
+def _safe_eval(node: ast.AST, context: Dict[str, Any]) -> Any:
+    if isinstance(node, ast.Expression):
+        return _safe_eval(node.body, context)
+
+    if isinstance(node, ast.Constant):
+        return node.value
+
+    if isinstance(node, ast.Name):
+        return context.get(node.id)
+
+    if isinstance(node, ast.Attribute):
+        base = _safe_eval(node.value, context)
+        if isinstance(base, dict):
+            return base.get(node.attr)
+        return getattr(base, node.attr, None)
+
+    if isinstance(node, ast.List):
+        return [_safe_eval(element, context) for element in node.elts]
+
+    if isinstance(node, ast.Tuple):
+        return tuple(_safe_eval(element, context) for element in node.elts)
+
+    if isinstance(node, ast.UnaryOp):
+        operand = _safe_eval(node.operand, context)
+        if isinstance(node.op, ast.USub):
+            return -operand
+        if isinstance(node.op, ast.UAdd):
+            return +operand
+        if isinstance(node.op, ast.Not):
+            return not operand
+        raise ValueError(f"Unsupported unary operator: {type(node.op).__name__}")
+
+    if isinstance(node, ast.BinOp):
+        operator_fn = _ALLOWED_BIN_OPS.get(type(node.op))
+        if operator_fn is None:
+            raise ValueError(f"Unsupported arithmetic operator: {type(node.op).__name__}")
+        return operator_fn(_safe_eval(node.left, context), _safe_eval(node.right, context))
+
+    if isinstance(node, ast.BoolOp):
+        values = [_safe_eval(value, context) for value in node.values]
+        if isinstance(node.op, ast.And):
+            return all(values)
+        if isinstance(node.op, ast.Or):
+            return any(values)
+        raise ValueError(f"Unsupported boolean operator: {type(node.op).__name__}")
+
+    if isinstance(node, ast.Compare):
+        left = _safe_eval(node.left, context)
+        for operator_node, comparator_node in zip(node.ops, node.comparators):
+            operator_fn = _ALLOWED_COMPARE_OPS.get(type(operator_node))
+            if operator_fn is None:
+                raise ValueError(
+                    f"Unsupported comparison operator: {type(operator_node).__name__}"
+                )
+            right = _safe_eval(comparator_node, context)
+            if not operator_fn(left, right):
+                return False
+            left = right
+        return True
+
+    raise ValueError(f"Unsupported expression node: {type(node).__name__}")
 
 
 def evaluate_condition(condition: str, context: Dict[str, Any]) -> Tuple[bool, Any]:
     """
-    Evaluate a single rule condition string.
-    Supports: >=, <=, >, <, ==, !=, in (list)
-
-    Examples:
-        "data.age >= 18"
-        "external.credit_score >= 600"
-        "data.employment_status in ['employed', 'self_employed']"
-        "data.loan_amount <= data.monthly_income * 10"
+    Evaluate a single rule condition string using a restricted AST parser.
+    Supports comparisons, list membership, boolean operators, and basic arithmetic.
     """
     try:
-        # Handle 'in' operator with list literal
-        if " in [" in condition or " in [" in condition:
-            left_str, right_str = condition.split(" in ", 1)
-            left_val = _resolve_path(left_str.strip(), context)
-            right_val = eval(right_str.strip(), {"__builtins__": {}})
-            return (left_val in right_val), left_val
+        expression = ast.parse(condition, mode="eval")
+        result = _safe_eval(expression, context)
 
-        # Handle arithmetic in right-hand side (e.g., data.monthly_income * 10)
-        for op in [">=", "<=", "!=", ">", "<", "=="]:
-            if f" {op} " in condition:
-                left_str, right_str = condition.split(f" {op} ", 1)
-                left_str = left_str.strip()
-                right_str = right_str.strip()
+        if isinstance(expression.body, ast.Compare):
+            left_value = _safe_eval(expression.body.left, context)
+        else:
+            left_value = result
 
-                left_val = _resolve_path(left_str, context)
-
-                # Right side may be arithmetic involving context paths
-                # Replace context references in right_str with actual values
-                for key in ["data", "external"]:
-                    if key in right_str:
-                        # Try resolving sub-paths
-                        parts = right_str.split()
-                        resolved_parts = []
-                        for p in parts:
-                            if p.startswith(f"{key}."):
-                                rv = _resolve_path(p, context)
-                                resolved_parts.append(str(rv) if rv is not None else "0")
-                            else:
-                                resolved_parts.append(p)
-                        right_str = " ".join(resolved_parts)
-
-                right_val = eval(right_str, {"__builtins__": {}})
-
-                if left_val is None:
-                    return False, None
-
-                ops_map = {
-                    ">=": lambda a, b: a >= b,
-                    "<=": lambda a, b: a <= b,
-                    ">": lambda a, b: a > b,
-                    "<": lambda a, b: a < b,
-                    "==": lambda a, b: a == b,
-                    "!=": lambda a, b: a != b,
-                }
-                result = ops_map[op](left_val, right_val)
-                return result, left_val
-
-        logger.warning(f"Unparseable condition: {condition}")
-        return False, None
-
-    except Exception as e:
-        logger.error(f"Rule eval error for '{condition}': {e}")
+        return bool(result), left_value
+    except Exception as exc:
+        logger.error("Rule eval error for '%s': %s", condition, exc)
         return False, None
 
 
@@ -105,16 +121,17 @@ def evaluate_rules(rules_config: List[Dict], context: Dict[str, Any]) -> List[Ru
         on_fail = rule.get("on_fail", "reject")
 
         passed, value = evaluate_condition(condition, context)
+        results.append(
+            RuleResult(
+                rule_id=rule_id,
+                description=description,
+                passed=passed,
+                value_evaluated=value,
+                on_fail_action=on_fail,
+            )
+        )
 
-        results.append(RuleResult(
-            rule_id=rule_id,
-            description=description,
-            passed=passed,
-            value_evaluated=value,
-            on_fail_action=on_fail
-        ))
-
-        logger.info(f"  Rule [{rule_id}]: {'PASS' if passed else 'FAIL'} | value={value}")
+        logger.info("  Rule [%s]: %s | value=%s", rule_id, "PASS" if passed else "FAIL", value)
 
     return results
 
@@ -124,15 +141,15 @@ def get_decision_from_rules(rule_results: List[RuleResult]) -> str:
     Derive a decision from rule results.
     Priority order: reject > manual_review > approved
     """
-    failed = [r for r in rule_results if not r.passed]
+    failed = [result for result in rule_results if not result.passed]
 
     if not failed:
         return "approved"
 
-    if any(r.on_fail_action == "reject" for r in failed):
+    if any(result.on_fail_action == "reject" for result in failed):
         return "rejected"
 
-    if any(r.on_fail_action == "manual_review" for r in failed):
+    if any(result.on_fail_action == "manual_review" for result in failed):
         return "manual_review"
 
     return "approved"

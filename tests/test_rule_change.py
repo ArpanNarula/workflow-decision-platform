@@ -21,7 +21,7 @@ def _read_config():
 
 def _write_config(config):
     with open(CONFIG_PATH, "w") as f:
-        yaml.dump(config, f, default_flow_style=False)
+        yaml.dump(config, f, default_flow_style=False, sort_keys=False)
 
 
 @pytest.fixture(autouse=True)
@@ -60,6 +60,8 @@ def test_tightening_income_rule_rejects_previously_valid(client):
 
     assert resp.status_code == 200
     data = resp.json()
+    assert data["status"] == "rejected"
+    assert data["decision"] == "rejected"
     income_rule_result = next(
         (r for r in data["rules_triggered"] if r["rule_id"] == "min_income"), None
     )
@@ -95,6 +97,8 @@ def test_adding_new_rule_gets_evaluated(client):
 
     assert resp.status_code == 200
     data = resp.json()
+    assert data["status"] == "rejected"
+    assert data["decision"] == "rejected"
     new_rule = next((r for r in data["rules_triggered"] if r["rule_id"] == "max_loan_cap"), None)
     assert new_rule is not None
     assert new_rule["passed"] is False  # 500000 > 200000

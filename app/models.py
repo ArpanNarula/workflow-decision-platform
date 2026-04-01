@@ -25,7 +25,7 @@ class RuleResult(BaseModel):
 class StageResult(BaseModel):
     stage_name: str
     status: str
-    rules_results: List[RuleResult] = []
+    rules_results: List[RuleResult] = Field(default_factory=list)
     ai_reasoning: Optional[str] = None
     timestamp: datetime = Field(default_factory=datetime.utcnow)
 
@@ -41,7 +41,7 @@ class WorkflowRequest(BaseModel):
             "example": {
                 "request_id": "req-loan-001",
                 "workflow_type": "loan_approval",
-                "applicant_name": "Rahul Sharma",
+                "applicant_name": "Ananya Singh",
                 "data": {
                     "age": 28,
                     "monthly_income": 75000,
@@ -76,8 +76,8 @@ class WorkflowState(BaseModel):
     status: WorkflowStatus
     current_stage: str
     data: Dict[str, Any]
-    stage_history: List[Any] = []
-    audit_trail: List[Dict[str, Any]] = []
+    stage_history: List[Any] = Field(default_factory=list)
+    audit_trail: List[Dict[str, Any]] = Field(default_factory=list)
     attempt_count: int = 1
     created_at: datetime = Field(default_factory=datetime.utcnow)
     updated_at: datetime = Field(default_factory=datetime.utcnow)

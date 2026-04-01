@@ -47,6 +47,7 @@ stages:
   - name: ai_decision
     type: ai_agent
     required: true
+    enabled: true
     model: gemini-1.5-flash
 
   - name: final_decision

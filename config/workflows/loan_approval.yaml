@@ -1,65 +1,66 @@
-external_dependencies:
-- description: Simulates a credit bureau API with 15% failure rate for retry testing
-  name: credit_bureau
-  type: mock
-retry:
-  backoff_seconds: 2
-  max_attempts: 3
+workflow:
+  name: loan_approval
+  description: Personal loan decision workflow
+  version: '1.0'
+  author: Arpan Narula
 stages:
 - name: schema_validation
+  type: validation
   required: true
   required_fields:
   - age
   - monthly_income
   - loan_amount
   - employment_status
-  type: validation
-- dependency: credit_bureau
-  name: credit_check
-  required: true
-  timeout_seconds: 5
+- name: credit_check
   type: external_dependency
+  required: true
+  dependency: credit_bureau
+  timeout_seconds: 5
 - name: rule_evaluation
+  type: rules
   required: true
   rules:
-  - condition: data.age >= 18
+  - id: age_min
     description: Applicant must be at least 18 years old
-    id: age_min
+    condition: data.age >= 18
     on_fail: reject
-  - condition: data.age <= 65
+  - id: age_max
     description: Applicant must be under 65 years old
-    id: age_max
+    condition: data.age <= 65
     on_fail: reject
-  - condition: data.monthly_income >= 25000
+  - id: min_income
     description: Monthly income must be at least Rs. 25,000
-    id: min_income
+    condition: data.monthly_income >= 25000
     on_fail: reject
-  - condition: external.credit_score >= 600
+  - id: credit_score_threshold
     description: Credit score must be 600 or above
-    id: credit_score_threshold
+    condition: external.credit_score >= 600
     on_fail: reject
-  - condition: data.loan_amount <= data.monthly_income * 10
+  - id: loan_to_income_ratio
     description: Loan amount must not exceed 10x monthly income
-    id: loan_to_income_ratio
+    condition: data.loan_amount <= data.monthly_income * 10
     on_fail: manual_review
-  - condition: data.employment_status in ['employed', 'self_employed']
+  - id: employment_check
     description: Applicant must be employed or self-employed
-    id: employment_check
+    condition: data.employment_status in ['employed', 'self_employed']
     on_fail: reject
-  - condition: data.existing_loans <= 3
+  - id: existing_loans_limit
     description: Applicant must not hold more than 3 active loans
-    id: existing_loans_limit
+    condition: data.existing_loans <= 3
     on_fail: manual_review
-  type: rules
-- model: gemini-1.5-flash
-  name: ai_decision
-  required: true
+- name: ai_decision
   type: ai_agent
-- name: final_decision
   required: true
+  enabled: true
+  model: gemini-1.5-flash
+- name: final_decision
   type: decision
-workflow:
-  author: Arpan Narula
-  description: AI-powered personal loan application workflow
-  name: loan_approval
-  version: '1.0'
+  required: true
+retry:
+  max_attempts: 3
+  backoff_seconds: 2
+external_dependencies:
+- name: credit_bureau
+  type: mock
+  description: Simulates a credit bureau API with a 15% failure rate for retry testing

@@ -5,7 +5,7 @@
       "request": {
         "request_id": "example-001",
         "workflow_type": "loan_approval",
-        "applicant_name": "Rahul Sharma",
+        "applicant_name": "Ananya Singh",
         "data": {
           "age": 30,
           "monthly_income": 80000,
@@ -21,12 +21,12 @@
           {"rule_id": "age_min", "passed": true, "value_evaluated": 30},
           {"rule_id": "age_max", "passed": true, "value_evaluated": 30},
           {"rule_id": "min_income", "passed": true, "value_evaluated": 80000},
-          {"rule_id": "credit_score_threshold", "passed": true, "value_evaluated": 720},
+          {"rule_id": "credit_score_threshold", "passed": true, "value_evaluated": 795},
           {"rule_id": "loan_to_income_ratio", "passed": true, "value_evaluated": 500000},
           {"rule_id": "employment_check", "passed": true, "value_evaluated": "employed"},
           {"rule_id": "existing_loans_limit", "passed": true, "value_evaluated": 0}
         ],
-        "ai_reasoning": "Rahul presents a strong financial profile with stable employment, healthy income-to-loan ratio, and no existing debt. Credit score well above threshold. Approved with high confidence."
+        "ai_reasoning": "All configured approval rules passed. The applicant meets the age, income, employment, and credit thresholds."
       }
     },
     {
@@ -50,7 +50,7 @@
           {"rule_id": "min_income", "passed": false, "on_fail_action": "reject"},
           {"rule_id": "employment_check", "passed": false, "on_fail_action": "reject"}
         ],
-        "ai_reasoning": "Applicant is underage and has no verifiable income or employment. Three hard reject rules triggered. Application cannot proceed."
+        "ai_reasoning": "The request fails multiple hard reject checks, including age, income, and employment status."
       }
     },
     {
@@ -71,10 +71,9 @@
       "expected_output": {
         "status": "manual_review",
         "rules_triggered": [
-          {"rule_id": "loan_to_income_ratio", "passed": false, "on_fail_action": "manual_review"},
-          {"rule_id": "existing_loans_limit", "passed": false, "on_fail_action": "manual_review"}
+          {"rule_id": "loan_to_income_ratio", "passed": false, "on_fail_action": "manual_review"}
         ],
-        "ai_reasoning": "Applicant is self-employed with an elevated loan-to-income ratio and existing debt. No hard rejections, but risk warrants human review before final decision."
+        "ai_reasoning": "The request clears hard reject rules but fails a manual review threshold on loan-to-income ratio."
       }
     },
     {
@@ -82,7 +81,7 @@
       "request": {
         "request_id": "example-001",
         "workflow_type": "loan_approval",
-        "applicant_name": "Rahul Sharma",
+        "applicant_name": "Ananya Singh",
         "data": {
           "age": 30,
           "monthly_income": 80000,

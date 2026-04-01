@@ -104,7 +104,8 @@ def _run_workflow(request: WorkflowRequest, config: Dict, attempt: int) -> Workf
                 request.data,
                 rule_results,
                 external_data,
-                preliminary
+                preliminary,
+                stage,
             )
             final_decision = ai_result.get("final_decision", preliminary)
             stage_result = StageResult(

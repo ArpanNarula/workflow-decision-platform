@@ -1,3 +1,4 @@
+import hashlib
 import random
 import time
 import logging
@@ -15,6 +16,11 @@ class ExternalDependencyError(Exception):
     pass
 
 
+def _stable_seed(applicant_name: str) -> int:
+    digest = hashlib.sha256(applicant_name.encode("utf-8")).hexdigest()
+    return int(digest[:12], 16)
+
+
 def get_credit_score(applicant_name: str, force_fail: bool = False) -> Dict[str, Any]:
     """
     Simulated credit bureau API call.
@@ -28,16 +34,16 @@ def get_credit_score(applicant_name: str, force_fail: bool = False) -> Dict[str,
         logger.warning("Credit bureau API timeout for: %s", applicant_name)
         raise ExternalDependencyError("Credit bureau: connection timed out (504)")
 
-    # Deterministic score so the same name always returns the same score
-    base = (hash(applicant_name) % 400) + 400  # 400-800 range
+    seed = _stable_seed(applicant_name)
+    base = (seed % 401) + 400  # 400-800 range
 
     return {
         "provider": "MockCreditBureau v2",
         "applicant_name": applicant_name,
         "credit_score": base,
-        "credit_age_months": (hash(applicant_name) % 96) + 12,
-        "active_accounts": (hash(applicant_name) % 5),
-        "defaults_last_2_years": 0 if base >= 600 else (hash(applicant_name) % 2),
+        "credit_age_months": ((seed // 10) % 96) + 12,
+        "active_accounts": (seed // 100 % 5),
+        "defaults_last_2_years": 0 if base >= 600 else (seed // 1000 % 2),
         "retrieved_at": time.time(),
         "status": "success"
     }
